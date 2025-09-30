@@ -14,7 +14,6 @@ SESIONES = {
     "2025-09-05": "16:30",
     "2025-10-11": "11:00",
     "2025-10-16": "10:00",
-    # "2025-10-19": "17:00",
 }
 
 # Capacidad por categoría
@@ -22,18 +21,24 @@ MAX_POR_CANASTA = 4
 CATEG_MINI = "Minibasket"
 CATEG_GRANDE = "Canasta grande"
 
+# ====== CHEQUEOS DE SECRETS (SIN USAR VARIABLES NO DEFINIDAS) ======
 if "gcp_service_account" not in st.secrets:
     st.error("Faltan credenciales de Google en secrets: bloque [gcp_service_account].")
     st.stop()
 
-if not (st.secrets.get("SHEETS_SPREADSHEET_ID") or st.secrets.get("SHEETS_SPREADSHEET_URL") or SHEET_ID):
+# lee posibles formas de identificar la hoja sin usar SHEET_ID todavía
+_SID = st.secrets.get("SHEETS_SPREADSHEET_ID")
+_URL = st.secrets.get("SHEETS_SPREADSHEET_URL")
+_SID_BLOCK = (st.secrets.get("sheets") or {}).get("sheet_id")
+
+if not (_SID or _URL or _SID_BLOCK):
     st.error("Configura en secrets la hoja: SHEETS_SPREADSHEET_ID o SHEETS_SPREADSHEET_URL (o [sheets].sheet_id).")
     st.stop()
-    
+
 # ====== AJUSTES GENERALES ======
 st.set_page_config(page_title="Tecnificación Baloncesto", layout="centered")
 APP_TITLE = "🏀 Reserva de Sesiones - Tecnificación Baloncesto"
-ADMIN_QUERY_FLAG = "admin"  # si la URL tiene ?admin=1, se muestra login admin
+ADMIN_QUERY_FLAG = "admin"
 
 # ====== UTILS ======
 def read_secret(key: str, default=None):
@@ -43,7 +48,6 @@ def read_secret(key: str, default=None):
         return os.getenv(key, default)
 
 def to_text(v):
-    """Convierte cualquier valor en str seguro para ReportLab."""
     if v is None:
         return ""
     try:
@@ -60,29 +64,26 @@ def iso(d: dt.date) -> str:
     return d.isoformat()
 
 def _norm_name(s: str) -> str:
-    """Normaliza nombres para comparar (sin dobles espacios, casefold)."""
     return " ".join((s or "").split()).casefold()
 
-
-# ====== GOOGLE SHEETS (lectura/escritura) ======
+# ====== GOOGLE SHEETS ======
 import gspread
 from google.oauth2.service_account import Credentials
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 def _gc():
-    info = dict(st.secrets["gcp_service_account"])  # <- existe gracias a secrets.toml
+    info = dict(st.secrets["gcp_service_account"])
     creds = Credentials.from_service_account_info(info, scopes=SCOPES)
     return gspread.authorize(creds)
 
-# Opcional: solo si lo tienes en secrets con ese formato; NO es requerido.
-SHEET_ID = (st.secrets.get("sheets") or {}).get("sheet_id")
-ADMIN_FALLBACK = (st.secrets.get("app") or {}).get("admin_fallback", "tecnifi2025")
+# (opcional) por si quieres seguir exponiendo SHEET_ID
+SHEET_ID = _SID or _SID_BLOCK
 
 def _open_sheet():
     gc = _gc()
     url = st.secrets.get("SHEETS_SPREADSHEET_URL")
-    sid = st.secrets.get("SHEETS_SPREADSHEET_ID")
+    sid = st.secrets.get("SHEETS_SPREADSHEET_ID") or (st.secrets.get("sheets") or {}).get("sheet_id")
     if url:
         return gc.open_by_url(url)
     elif sid:
@@ -90,6 +91,7 @@ def _open_sheet():
     else:
         st.error("Falta SHEETS_SPREADSHEET_URL o SHEETS_SPREADSHEET_ID en secrets.")
         st.stop()
+
 
 @st.cache_data(ttl=15)
 def load_df(sheet_name: str) -> pd.DataFrame:
