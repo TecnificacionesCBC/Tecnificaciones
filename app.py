@@ -22,6 +22,14 @@ MAX_POR_CANASTA = 4
 CATEG_MINI = "Minibasket"
 CATEG_GRANDE = "Canasta grande"
 
+if "gcp_service_account" not in st.secrets:
+    st.error("Faltan credenciales de Google en secrets: bloque [gcp_service_account].")
+    st.stop()
+
+if not (st.secrets.get("SHEETS_SPREADSHEET_ID") or st.secrets.get("SHEETS_SPREADSHEET_URL") or SHEET_ID):
+    st.error("Configura en secrets la hoja: SHEETS_SPREADSHEET_ID o SHEETS_SPREADSHEET_URL (o [sheets].sheet_id).")
+    st.stop()
+    
 # ====== AJUSTES GENERALES ======
 st.set_page_config(page_title="Tecnificación Baloncesto", layout="centered")
 APP_TITLE = "🏀 Reserva de Sesiones - Tecnificación Baloncesto"
@@ -67,8 +75,9 @@ def _gc():
     creds = Credentials.from_service_account_info(info, scopes=SCOPES)
     return gspread.authorize(creds)
 
-SHEET_ID = st.secrets["sheets"]["sheet_id"]
-ADMIN_FALLBACK = st.secrets.get("app", {}).get("admin_fallback", "tecnifi2025")
+# Opcional: solo si lo tienes en secrets con ese formato; NO es requerido.
+SHEET_ID = (st.secrets.get("sheets") or {}).get("sheet_id")
+ADMIN_FALLBACK = (st.secrets.get("app") or {}).get("admin_fallback", "tecnifi2025")
 
 def _open_sheet():
     gc = _gc()
